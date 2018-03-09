@@ -22,10 +22,14 @@ function StreamProcessor(sdk_key, config, requestor) {
     es.addEventListener('put', function(e) {
       config.logger.debug('Received put event');
       if (e && e.data) {
-        var flags = JSON.parse(e.data);
-        store.init(flags, function() {
-          cb();
-        })     
+        try {
+          var flags = JSON.parse(e.data);
+          store.init(flags, function() {
+            cb();
+          })
+        } catch (err) {
+          cb(new errors.LDStreamingError(`[put] Data ${e.data}\n${err.message}`, err.code));
+        }
       } else {
         cb(new errors.LDStreamingError('Unexpected payload from event stream'));
       }
@@ -34,8 +38,12 @@ function StreamProcessor(sdk_key, config, requestor) {
     es.addEventListener('patch', function(e) {
       config.logger.debug('Received patch event');
       if (e && e.data) {
-        var patch = JSON.parse(e.data);
-        store.upsert(patch.data.key, patch.data);
+        try {
+          var patch = JSON.parse(e.data);
+          store.upsert(patch.data.key, patch.data);
+        } catch (err) {
+          cb(new errors.LDStreamingError(`[patch] Data ${e.data}\n${err.message}`, err.code));
+        }
       } else {
         cb(new errors.LDStreamingError('Unexpected payload from event stream'));
       }
@@ -43,12 +51,16 @@ function StreamProcessor(sdk_key, config, requestor) {
 
     es.addEventListener('delete', function(e) {
       config.logger.debug('Received delete event');
-      if (e && e.data) {        
-        var data = JSON.parse(e.data),
-            key = data.path.charAt(0) === '/' ? data.path.substring(1) : data.path, // trim leading '/'
-            version = data.version;
+      if (e && e.data) {
+        try {
+          var data = JSON.parse(e.data),
+              key = data.path.charAt(0) === '/' ? data.path.substring(1) : data.path, // trim leading '/'
+              version = data.version;
 
-        store.delete(key, version);
+          store.delete(key, version);
+        } catch (err) {
+          cb(new errors.LDStreamingError(`[delete] Data ${e.data}\n${err.message}`, err.code));
+        }
       } else {
         cb(new errors.LDStreamingError('Unexpected payload from event stream'));
       }
@@ -60,9 +72,13 @@ function StreamProcessor(sdk_key, config, requestor) {
         if (err) {
           cb(err);
         } else {
-          store.init(JSON.parse(flags), function() {
-            cb();
-          })          
+          try {
+            store.init(JSON.parse(flags), function() {
+              cb();
+            })
+          } catch (err) {
+            cb(new errors.LDStreamingError(`[indirect/put] Data ${e.data}\n${err.message}`, err.code));
+          }
         }
       })
     });
@@ -75,7 +91,11 @@ function StreamProcessor(sdk_key, config, requestor) {
           if (err) {
             cb(new errors.LDStreamingError('Unexpected error requesting feature flag'));
           } else {
-            store.upsert(key, JSON.parse(flag));
+            try {
+              store.upsert(key, JSON.parse(flag));
+            } catch (err) {
+              cb(new errors.LDStreamingError(`[indirect/patch] Data ${e.data}\n${err.message}`, err.code));
+            }
           }
         })
       } else {
